@@ -71,30 +71,30 @@ jobs:
       - name: Build standalone executable
         shell: pwsh
         env:
-          SWITCHY_VERSION: ${{ steps.meta.outputs.version }}
+          SWITCHERIT_VERSION: ${{ steps.meta.outputs.version }}
         run: .\build.ps1 -Configuration release
 
       - name: Build installer
         shell: pwsh
         env:
-          SWITCHY_VERSION: ${{ steps.meta.outputs.version }}
-          SWITCHY_VERSION_QUAD: ${{ steps.meta.outputs.version_quad }}
+          SWITCHERIT_VERSION: ${{ steps.meta.outputs.version }}
+          SWITCHERIT_VERSION_QUAD: ${{ steps.meta.outputs.version_quad }}
         run: |
           New-Item -ItemType Directory -Force -Path dist | Out-Null
-          & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" installer\Switchy.iss
+          & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" installer\switcherit.iss
 
       - name: Package standalone executable
         shell: pwsh
         run: |
-          Copy-Item build\Switchy.exe "dist\Switchy-${{ steps.meta.outputs.version }}-standalone.exe"
+          Copy-Item build\switcherit.exe "dist\switcherit-${{ steps.meta.outputs.version }}-standalone.exe"
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
         with:
           name: switchy-windows
           path: |
-            dist\Switchy-${{ steps.meta.outputs.version }}-Setup.exe
-            dist\Switchy-${{ steps.meta.outputs.version }}-standalone.exe
+            dist\switcherit-${{ steps.meta.outputs.version }}-Setup.exe
+            dist\switcherit-${{ steps.meta.outputs.version }}-standalone.exe
 
       - name: Create GitHub release
         if: github.ref_type == 'tag'
@@ -103,7 +103,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release create "${{ github.ref_name }}" `
-            "dist\Switchy-${{ steps.meta.outputs.version }}-Setup.exe" `
-            "dist\Switchy-${{ steps.meta.outputs.version }}-standalone.exe" `
-            --title "Switchy ${{ steps.meta.outputs.version }}" `
+            "dist\switcherit-${{ steps.meta.outputs.version }}-Setup.exe" `
+            "dist\switcherit-${{ steps.meta.outputs.version }}-standalone.exe" `
+            --title "switcherit ${{ steps.meta.outputs.version }}" `
             --generate-notes
