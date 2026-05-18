@@ -1,0 +1,109 @@
+name: Build and Release
+
+on:
+  push:
+    branches: [ "master" ]
+    tags: [ "v*" ]
+  pull_request:
+    branches: [ "master" ]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  windows:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up MSVC
+        uses: ilammy/msvc-dev-cmd@v1
+
+      - name: Install Odin
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $release = Invoke-RestMethod "https://api.github.com/repos/odin-lang/Odin/releases/latest"
+          $asset = $release.assets | Where-Object { $_.name -match "windows.*amd64.*\.zip$" } | Select-Object -First 1
+          if (-not $asset) {
+            throw "Could not find a Windows amd64 Odin release asset."
+          }
+
+          New-Item -ItemType Directory -Force -Path "$env:RUNNER_TEMP\odin" | Out-Null
+          $archive = Join-Path $env:RUNNER_TEMP $asset.name
+          Invoke-WebRequest $asset.browser_download_url -OutFile $archive
+          Expand-Archive $archive -DestinationPath "$env:RUNNER_TEMP\odin" -Force
+          $odinExe = Get-ChildItem "$env:RUNNER_TEMP\odin" -Recurse -Filter odin.exe | Select-Object -First 1
+          if (-not $odinExe) {
+            throw "odin.exe was not found in the downloaded archive."
+          }
+
+          Add-Content $env:GITHUB_PATH $odinExe.Directory.FullName
+
+      - name: Install Inno Setup
+        shell: pwsh
+        run: choco install innosetup --yes --no-progress
+
+      - name: Prepare release metadata
+        id: meta
+        shell: pwsh
+        run: |
+          $refName = "${{ github.ref_name }}"
+          $version = if ("${{ github.ref_type }}" -eq "tag") { $refName.TrimStart("v") } else { "dev" }
+          $numericParts = @()
+          foreach ($part in ($version -split '[.-]')) {
+            if ($part -match '^\d+$') {
+              $numericParts += [int]$part
+            } else {
+              break
+            }
+          }
+          while ($numericParts.Count -lt 4) {
+            $numericParts += 0
+          }
+          $versionQuad = ($numericParts[0..3] -join ".")
+          "version=$version" >> $env:GITHUB_OUTPUT
+          "version_quad=$versionQuad" >> $env:GITHUB_OUTPUT
+
+      - name: Build standalone executable
+        shell: pwsh
+        env:
+          SWITCHY_VERSION: ${{ steps.meta.outputs.version }}
+        run: .\build.ps1 -Configuration release
+
+      - name: Build installer
+        shell: pwsh
+        env:
+          SWITCHY_VERSION: ${{ steps.meta.outputs.version }}
+          SWITCHY_VERSION_QUAD: ${{ steps.meta.outputs.version_quad }}
+        run: |
+          New-Item -ItemType Directory -Force -Path dist | Out-Null
+          & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" installer\Switchy.iss
+
+      - name: Package standalone executable
+        shell: pwsh
+        run: |
+          Copy-Item build\Switchy.exe "dist\Switchy-${{ steps.meta.outputs.version }}-standalone.exe"
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: switchy-windows
+          path: |
+            dist\Switchy-${{ steps.meta.outputs.version }}-Setup.exe
+            dist\Switchy-${{ steps.meta.outputs.version }}-standalone.exe
+
+      - name: Create GitHub release
+        if: github.ref_type == 'tag'
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${{ github.ref_name }}" `
+            "dist\Switchy-${{ steps.meta.outputs.version }}-Setup.exe" `
+            "dist\Switchy-${{ steps.meta.outputs.version }}-standalone.exe" `
+            --title "Switchy ${{ steps.meta.outputs.version }}" `
+            --generate-notes
