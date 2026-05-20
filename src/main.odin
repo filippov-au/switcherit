@@ -22,6 +22,7 @@ tray_icon: win.HICON
 enabled := true
 debug_enabled := false
 caps_processed := false
+shift_caps_active := false
 
 // Win32 bindings not exposed by core:sys/windows in this Odin version
 HKL :: rawptr
@@ -44,6 +45,7 @@ foreign user32 {
 	GetKeyboardLayout   :: proc(thread_id: u32) -> HKL ---
 	GetKeyboardLayoutList :: proc(buffer_count: i32, list: [^]HKL) -> i32 ---
 	ActivateKeyboardLayout :: proc(layout: HKL, flags: u32) -> HKL ---
+	GetAsyncKeyState     :: proc(v_key: i32) -> i16 ---
 }
 
 foreign import kernel32 "system:kernel32.lib"
@@ -256,6 +258,23 @@ low_level_keyboard_proc :: proc "stdcall" (n_code: i32, wparam: win.WPARAM, lpar
 		}
 
 		if key.vkCode == win.VK_CAPITAL {
+			is_shift_down := GetAsyncKeyState(win.VK_SHIFT) < 0
+
+			if wparam == win.WM_KEYDOWN || wparam == win.WM_SYSKEYDOWN {
+				if is_shift_down {
+					shift_caps_active = true
+				} else {
+					shift_caps_active = false
+				}
+			}
+
+			if shift_caps_active {
+				if wparam == win.WM_KEYUP || wparam == win.WM_SYSKEYUP {
+					shift_caps_active = false
+				}
+				return win.CallNextHookEx(h_hook, n_code, wparam, lparam)
+			}
+
 			if wparam == win.WM_SYSKEYDOWN && !caps_processed {
 				caps_processed = true
 				enabled = !enabled
