@@ -5,6 +5,7 @@ switcherit switches keyboard layout with the Caps Lock key and runs quietly from
 ## Usage
 
 - **CapsLock** changes keyboard layout.
+- **Shift+CapsLock** toggles the standard Caps Lock state (capitalization) natively.
 - **Alt+CapsLock** enables or disables switcherit.
 
 ## Administrator programs
